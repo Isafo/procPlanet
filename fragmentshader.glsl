@@ -1,7 +1,7 @@
 #version 330 core
 
 uniform float time;
-//uniform sampler2D tex;
+uniform sampler2D depthTex;
 
 in vec3 interpolatedNormal;
 in vec2 st;

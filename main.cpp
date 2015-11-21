@@ -2,6 +2,9 @@
 #include "MatrixStack.h"
 #include "TriangleSoup.hpp"
 
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+
 // ---- Function dectarations ---- 
 void GLRenderCalls();
 //! Sets up the GLFW viewport
@@ -19,6 +22,9 @@ int main() {
 		0.0f, 0.0f, -0.2f, 0.0f };
 	GLint locationP;
 	GLint locationMV;
+	GLint location_depthTex;
+	GLint location_depthP;
+	GLint location_depthMV;
 
 	float translation[3];
 
@@ -48,30 +54,78 @@ int main() {
 	printf("Renderer: %s\n", renderer);
 	printf("OpenGL version supported %s\n", version);
 
+
+	// create and set up the FBO \_________________________________________________________________________
+	GLuint lightViewFBO;
+	glGenFramebuffers(1, &lightViewFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, lightViewFBO);
+
+	GLfloat border[] = { 1.0f, 0.0f, 0.0f, 0.0f };
+
+	GLuint lightDepthTex;
+	glGenTextures(1, &lightDepthTex);
+	glBindTexture(GL_TEXTURE_2D, lightDepthTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glDrawBuffer(GL_NONE); // No color buffer is drawn to.
+
+	//Assign the shadow map to texture channel 0 
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, lightDepthTex);
+
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, lightDepthTex, 0);
+
+	GLuint depthTexture;
+	glGenTextures(1, &depthTexture);
+	glBindTexture(GL_TEXTURE_2D, depthTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB_FLOAT32_ATI, 1024, 1024,
+		0, GL_RGB, GL_FLOAT, NULL);
+	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+		depthTexture, 0);
+
+	glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
+	GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+
+	if (Status != GL_FRAMEBUFFER_COMPLETE) {
+		printf("FB error, status: 0x%x\n", Status);
+		return false;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 	// CREATE OBJECTS ////////////////////////////////////////////////////////////////////////////////
 	Shader ssaoShader;
 	ssaoShader.createShader("vertexshader.glsl", "fragmentshader.glsl");
+	Shader depthShader;
+	depthShader.createShader("depthShaderV.glsl", "depthShaderF.glsl");
 
 	MatrixStack MVstack;
 	MVstack.init();
 
 	locationMV = glGetUniformLocation(ssaoShader.programID, "MV");
 	locationP = glGetUniformLocation(ssaoShader.programID, "P");
+	location_depthTex = glGetUniformLocation(ssaoShader.programID, "depthTex");
+	location_depthMV = glGetUniformLocation(depthShader.programID, "MV");
+	location_depthP = glGetUniformLocation(ssaoShader.programID, "P");
 
 	float translateVector[3] = { 0.0f, 0.0f, 0.0f };
 
 	float test[3] = { 0.0f, 0.0f, 0.0f };
 
 	TriangleSoup  object;
-	//object.createSphere(0.5, 150);
 	object.readOBJ("meshes/trex.obj");
+
+	TriangleSoup  sphere;
+	sphere.createSphere(0.3, 20);
+
 
 	float rot = 0.0;
 	//RENDER LOOP /////////////////////////////////////////////////////////////////////////////////////
 	while (!glfwWindowShouldClose(window)) {
 
-		//NECESSARY RENDER CALLS /////////////////////////////////////////////////////////////////////
-		//modifyMesh(&mTest, window, mouse);
 		glfwPollEvents();
 
 		if (glfwGetKey(window, GLFW_KEY_A)){
@@ -81,15 +135,47 @@ int main() {
 			rot -= 0.02;
 		}
 
-		GLRenderCalls();
-
-		glUseProgram(ssaoShader.programID);
-
+		// Create depth map \________________________________________________________________________
+		
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, lightViewFBO);
 		setupViewport(window, P);
+
+		glClear(GL_DEPTH_BUFFER_BIT);
+		glUseProgram(depthShader.programID);
 		glUniformMatrix4fv(locationP, 1, GL_FALSE, P);
 
+		MVstack.push();
+			MVstack.push();
+				translateVector[0] = 0.0;
+				translateVector[1] = -0.25;
+				translateVector[2] = -2.0;
+				MVstack.translate(translateVector);
+				MVstack.rotY(rot * 3.1415);
+				glUniformMatrix4fv(locationMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
+				object.render();
+			MVstack.pop();
+
+			MVstack.push();
+				translateVector[0] = 1.0;
+				translateVector[1] = 0.0;
+				translateVector[2] = -2.5;
+				MVstack.translate(translateVector);
+				glUniformMatrix4fv(location_depthMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
+				sphere.render();
+			MVstack.pop();
+		MVstack.pop();
+
+		glReadBuffer(GL_NONE);
+
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
 		//SCENEGRAPH //////////////////////////////////////////////////////////////////////////////////
-		//camera transforms 
+		glUseProgram(ssaoShader.programID);
+		setupViewport(window, P);
+		GLRenderCalls();
+
+		glUniformMatrix4fv(locationP, 1, GL_FALSE, P);
+
 		MVstack.push();
 			translateVector[0] = 0.0;
 			translateVector[1] = -0.25;
@@ -98,6 +184,15 @@ int main() {
 			MVstack.rotY(rot * 3.1415);
 			glUniformMatrix4fv(locationMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
 			object.render();
+		MVstack.pop();
+
+		MVstack.push();
+			translateVector[0] = 1.0;
+			translateVector[1] = 0.0;
+			translateVector[2] = -2.5;
+			MVstack.translate(translateVector);
+			glUniformMatrix4fv(location_depthMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
+			sphere.render();
 		MVstack.pop();
 
 		glfwSwapBuffers(window);
@@ -120,7 +215,7 @@ void setupViewport(GLFWwindow *window, GLfloat *P) {
 
 void GLRenderCalls() {
 	// Set the clear color and depth, and clear the buffers for drawing
-	glClearColor(0.3f, 0.3f, 0.3f, 0.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glEnable(GL_DEPTH_TEST); // Use the Z buffer
