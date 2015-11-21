@@ -9,6 +9,8 @@
 void GLRenderCalls();
 //! Sets up the GLFW viewport
 void setupViewport(GLFWwindow *window, GLfloat *P);
+
+void matrixMult(float* M1, float* M2, float* Mout);
 // --------------------------------
 
 int main() {
@@ -23,8 +25,14 @@ int main() {
 	GLint locationP;
 	GLint locationMV;
 	GLint location_depthTex;
-	GLint location_depthP;
-	GLint location_depthMV;
+	GLint location_depthMVP;
+	GLint location_depthBiasMVP;
+
+	float biasMatrix[16] = { 0.5f, 0.0f, 0.0f, 0.0f,
+							 0.0f, 0.5f, 0.0f, 0.0f,
+							 0.0f, 0.0f, 0.5f, 0.0f,
+							 0.5f, 0.5f, 0.5f, 1.0f };
+
 
 	float translation[3];
 
@@ -107,9 +115,10 @@ int main() {
 
 	locationMV = glGetUniformLocation(ssaoShader.programID, "MV");
 	locationP = glGetUniformLocation(ssaoShader.programID, "P");
-	location_depthTex = glGetUniformLocation(ssaoShader.programID, "depthTex");
-	location_depthMV = glGetUniformLocation(depthShader.programID, "MV");
-	location_depthP = glGetUniformLocation(ssaoShader.programID, "P");
+	location_depthTex = glGetUniformLocation(ssaoShader.programID, "depthTex"); 
+	location_depthBiasMVP = glGetUniformLocation(ssaoShader.programID, "depthBiasMVP");
+
+	location_depthMVP = glGetUniformLocation(depthShader.programID, "MVP");
 
 	float translateVector[3] = { 0.0f, 0.0f, 0.0f };
 
@@ -136,35 +145,51 @@ int main() {
 		}
 
 		// Create depth map \________________________________________________________________________
-		
+
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, lightViewFBO);
 		setupViewport(window, P);
 
 		glClear(GL_DEPTH_BUFFER_BIT);
 		glUseProgram(depthShader.programID);
-		glUniformMatrix4fv(locationP, 1, GL_FALSE, P);
+
+		glm::vec3 lightInvDir = glm::vec3(0.5f, 1.0, -1.0);
+
+		// Compute the MVP matrix from the light's point of view
+
+		glm::mat4 depthP = glm::ortho<float>(-10, 10, -10, 10, -10, 20);
+		glm::transpose(depthP);
+		glm::mat4 depthV = glm::lookAt(lightInvDir, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+
+		glUniformMatrix4fv(locationP, 1, GL_FALSE, &depthP[0][0]);
+
+		float fDepthMVP[16] = { 0.0, 0.0, 0.0, 0.0,
+								0.0, 0.0, 0.0, 0.0,
+								0.0, 0.0, 0.0, 0.0,
+								0.0, 0.0, 0.0, 0.0 };
+
+		float depthBiasMVP[16] = { 0.0, 0.0, 0.0, 0.0,
+								   0.0, 0.0, 0.0, 0.0,
+								   0.0, 0.0, 0.0, 0.0, 
+								   0.0, 0.0, 0.0, 0.0 };
 
 		MVstack.push();
+			MVstack.multiply(&depthV[0][0]);
+
 			MVstack.push();
 				translateVector[0] = 0.0;
 				translateVector[1] = -0.25;
 				translateVector[2] = -2.0;
 				MVstack.translate(translateVector);
 				MVstack.rotY(rot * 3.1415);
-				glUniformMatrix4fv(locationMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
+				matrixMult(&depthP[0][0], MVstack.getCurrentMatrix(), fDepthMVP);
+				glUniformMatrix4fv(location_depthMVP, 1, GL_FALSE, fDepthMVP);
+
+				matrixMult(biasMatrix, fDepthMVP, depthBiasMVP);
+				glUniformMatrix4fv(location_depthBiasMVP, 1, GL_FALSE, depthBiasMVP);
 				object.render();
 			MVstack.pop();
-
-			MVstack.push();
-				translateVector[0] = 1.0;
-				translateVector[1] = 0.0;
-				translateVector[2] = -2.5;
-				MVstack.translate(translateVector);
-				glUniformMatrix4fv(location_depthMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
-				sphere.render();
-			MVstack.pop();
 		MVstack.pop();
-
+		
 		glReadBuffer(GL_NONE);
 
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -186,18 +211,9 @@ int main() {
 			object.render();
 		MVstack.pop();
 
-		MVstack.push();
-			translateVector[0] = 1.0;
-			translateVector[1] = 0.0;
-			translateVector[2] = -2.5;
-			MVstack.translate(translateVector);
-			glUniformMatrix4fv(location_depthMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
-			sphere.render();
-		MVstack.pop();
-
 		glfwSwapBuffers(window);
 	}
-
+	
 	glfwTerminate();
 
 	return 0;
@@ -221,4 +237,24 @@ void GLRenderCalls() {
 	glEnable(GL_DEPTH_TEST); // Use the Z buffer
 	glEnable(GL_CULL_FACE);  // Use back face culling
 	glCullFace(GL_BACK);
+}
+
+void matrixMult(float* M1, float* M2, float* Mout) {
+	// Compute result in a local variable to avoid conflicts
+	// with overwriting if Mout is the same variable as either
+	// M1 or M2.
+	float Mtemp[16];
+	int i, j;
+	// Perform the multiplication M3 = M1*M2
+	// (i is row index, j is column index)
+	for (i = 0; i<4; i++) {
+		for (j = 0; j<4; j++) {
+			Mtemp[i + j * 4] = M1[i] * M2[j * 4] + M1[i + 4] * M2[1 + j * 4]
+				+ M1[i + 8] * M2[2 + j * 4] + M1[i + 12] * M2[3 + j * 4];
+		}
+	}
+	// Copy the result to the output variable
+	for (i = 0; i<16; i++) {
+		Mout[i] = Mtemp[i];
+	}
 }
