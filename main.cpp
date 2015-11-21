@@ -153,12 +153,14 @@ int main() {
 		glUseProgram(depthShader.programID);
 
 		glm::vec3 lightInvDir = glm::vec3(0.5f, 1.0, -1.0);
+		glm::vec3 lightPos = glm::vec3(0.0f, 4.0, 3.0);
+		glm::vec3 LightDir = glm::vec3(0.0f, -4.0, -3.0);
 
 		// Compute the MVP matrix from the light's point of view
 
 		glm::mat4 depthP = glm::ortho<float>(-10, 10, -10, 10, -10, 20);
 		glm::transpose(depthP);
-		glm::mat4 depthV = glm::lookAt(lightInvDir, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+		glm::mat4 depthV = glm::lookAt(lightPos, lightPos + glm::normalize(LightDir), glm::vec3(0, 1, 0));
 
 		glUniformMatrix4fv(locationP, 1, GL_FALSE, &depthP[0][0]);
 

@@ -7,11 +7,14 @@ in vec3 interpolatedNormal;
 in vec2 st;
 in vec4 depthCoord;
 in vec3 viewPos;
+in vec3 pos;
 
 out vec4 color;
 
 uniform float radius = 1.5;
 uniform float distanceThreshold = 1.5;
+
+vec4 lightPos = vec4(0.0f, 4.0f, 3.0f, 1.0f);
 
 const int sample_count = 16;
 const vec2 poisson16[] = vec2[](    // These are the Poisson Disk Samples
@@ -62,10 +65,34 @@ void main() {
 
 	occlusion = 1.0 - (occlusion / sample_count);
 
-	 vec4 texcolor = vec4(1.0, 1.0, 1.0, 1.0);
+
+	vec3 LightIntensity = vec3(0.8f, 0.8f, 0.8f) * occlusion;
+
+	vec3 Kd = vec3(0.7f, 0.7f, 0.7f);                // Diffuse reflectivity
+	vec3 Ka = vec3(0.1f, 0.1f, 0.1f);                // Ambient reflectivity
+	vec3 Ks = vec3( 0.2f, 0.2f, 0.2f);				 // Specular reflectivity
+	float Shininess = 6.0f;							 // Specular shininess factor
+	vec3 norm = normalize( interpolatedNormal );			
+	vec3 vie = normalize(vec3(-pos));				 // viewDir	
+		
+	float strength = 0.8f;
+
+	//float distance0 = length( vec3(lPos) - pos);
+	
+	// 0th
+	vec3 s = normalize( vec3(lightPos) - pos );			 // lightDir
+	vec3 r = reflect( -s, norm );						 // reflectDir
+
+	vec3 LI = LightIntensity * (  Ka + Kd * max( dot(s, norm), 0.0 ))
+			  + Ks * pow( max( dot(r,vie), 0.0 ), Shininess ) * strength;
+
+	color  = vec4(LI, 1.0);
+
+	/*
+	 vec4 texcolor = vec4(0.5, 0.5, 0.5, 1.0);
      vec3 nNormal = normalize(interpolatedNormal);
      float diffuse = max(0.0, nNormal.z);
      color = texcolor * occlusion;
-	 //color = texcolor * diffuse;
+	 //color = texcolor * diffuse;*/
 }
 
