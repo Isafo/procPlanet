@@ -26,5 +26,4 @@ void main(){
 	st = TexCoord;
 
 	depthCoord = depthBiasMVP * vec4(Position, 1.0);
-
 }

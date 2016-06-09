@@ -14,7 +14,7 @@ out vec4 color;
 uniform float radius = 1.5;
 uniform float distanceThreshold = 1.5;
 
-vec4 lightPos = vec4(0.0f, 4.0f, 3.0f, 1.0f);
+vec4 lightPos = vec4(0.0f, 1.0f, -1.0f, 1.0f);
 
 const int sample_count = 16;
 const vec2 poisson16[] = vec2[](    // These are the Poisson Disk Samples
@@ -43,7 +43,7 @@ vec3 calcPos(vec2 coord, float depth) {
 
 void main() {
      
-	 float occlusion = 0.0f;
+	float occlusion = 0.0f;
 
 	for (int i = 0; i < sample_count; i++) {
 		vec2 sampleTexCoord = st + (poisson16[i] * radius);
@@ -64,7 +64,6 @@ void main() {
 	}
 
 	occlusion = 1.0 - (occlusion / sample_count);
-
 
 	vec3 LightIntensity = vec3(1.0f, 1.0f, 1.0f) * occlusion;
 
@@ -87,7 +86,7 @@ void main() {
 			  + Ks * pow( max( dot(r,vie), 0.0 ), Shininess ) * strength;
 
 	color  = vec4(LI, 1.0);
-	
+
 	 /*vec4 texcolor = vec4(1.0, 1.0, 1.0, 1.0);
      vec3 nNormal = normalize(interpolatedNormal);
      float diffuse = max(0.0, nNormal.z);
