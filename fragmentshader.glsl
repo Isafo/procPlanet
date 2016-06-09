@@ -66,7 +66,7 @@ void main() {
 	occlusion = 1.0 - (occlusion / sample_count);
 
 
-	vec3 LightIntensity = vec3(0.8f, 0.8f, 0.8f) * occlusion;
+	vec3 LightIntensity = vec3(1.0f, 1.0f, 1.0f) * occlusion;
 
 	vec3 Kd = vec3(0.7f, 0.7f, 0.7f);                // Diffuse reflectivity
 	vec3 Ka = vec3(0.1f, 0.1f, 0.1f);                // Ambient reflectivity
@@ -87,12 +87,11 @@ void main() {
 			  + Ks * pow( max( dot(r,vie), 0.0 ), Shininess ) * strength;
 
 	color  = vec4(LI, 1.0);
-
-	/*
-	 vec4 texcolor = vec4(0.5, 0.5, 0.5, 1.0);
+	
+	 /*vec4 texcolor = vec4(1.0, 1.0, 1.0, 1.0);
      vec3 nNormal = normalize(interpolatedNormal);
      float diffuse = max(0.0, nNormal.z);
-     color = texcolor * occlusion;
-	 //color = texcolor * diffuse;*/
+     color = texcolor * occlusion;*/
+	 //color = texcolor * diffuse;
 }
 

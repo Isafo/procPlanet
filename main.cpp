@@ -1,6 +1,7 @@
 #include "Shader.h"
 #include "MatrixStack.h"
 #include "TriangleSoup.hpp"
+#include "Plane.h"
 
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
@@ -69,32 +70,23 @@ int main() {
 	glBindFramebuffer(GL_FRAMEBUFFER, lightViewFBO);
 
 	GLfloat border[] = { 1.0f, 0.0f, 0.0f, 0.0f };
-
+	
 	GLuint lightDepthTex;
 	glGenTextures(1, &lightDepthTex);
 	glBindTexture(GL_TEXTURE_2D, lightDepthTex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glDrawBuffer(GL_NONE); // No color buffer is drawn to.
 
 	//Assign the shadow map to texture channel 0 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, lightDepthTex);
 
-	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, lightDepthTex, 0);
-
-	GLuint depthTexture;
-	glGenTextures(1, &depthTexture);
-	glBindTexture(GL_TEXTURE_2D, depthTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB_FLOAT32_ATI, 1024, 1024,
-		0, GL_RGB, GL_FLOAT, NULL);
-	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-		depthTexture, 0);
-
-	glDrawBuffer(GL_COLOR_ATTACHMENT0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, lightDepthTex, 0);
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
 
 	GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 
@@ -125,23 +117,26 @@ int main() {
 	float test[3] = { 0.0f, 0.0f, 0.0f };
 
 	TriangleSoup  object;
-	object.readOBJ("meshes/trex.obj");
+	object.readOBJ("trex.obj");
 
-	TriangleSoup  sphere;
-	sphere.createSphere(0.3, 20);
-
+	Plane plane(0.0, 0.0, 0.0, 100.0, 100.0);
 
 	float rot = 0.0;
+	float lastTime{ 0.0f };
+	float currentTime{ 0.0f };
+	float deltaTime{ 0.0f };
 	//RENDER LOOP /////////////////////////////////////////////////////////////////////////////////////
 	while (!glfwWindowShouldClose(window)) {
-
+		lastTime = currentTime;
+		currentTime = glfwGetTime();
+		deltaTime = currentTime - lastTime;
 		glfwPollEvents();
 
-		if (glfwGetKey(window, GLFW_KEY_A)){
-			rot += 0.02;
+		if (glfwGetKey(window, GLFW_KEY_A)) {
+			rot += 0.3 * deltaTime;
 		}
-		if (glfwGetKey(window, GLFW_KEY_D)){
-			rot -= 0.02;
+		if (glfwGetKey(window, GLFW_KEY_D)) {
+			rot -= 0.3 * deltaTime;
 		}
 
 		// Create depth map \________________________________________________________________________
@@ -152,15 +147,14 @@ int main() {
 		glClear(GL_DEPTH_BUFFER_BIT);
 		glUseProgram(depthShader.programID);
 
-		glm::vec3 lightInvDir = glm::vec3(0.5f, 1.0, -1.0);
-		glm::vec3 lightPos = glm::vec3(0.0f, 4.0, 3.0);
-		glm::vec3 LightDir = glm::vec3(0.0f, -4.0, -3.0);
+		glm::vec3 lightPos = glm::vec3(0.0f, 0.0, -1.0);
+		glm::vec3 LightDir = glm::vec3(0.0f, 0.0, 1.0);
 
 		// Compute the MVP matrix from the light's point of view
 
 		glm::mat4 depthP = glm::ortho<float>(-10, 10, -10, 10, -10, 20);
 		glm::transpose(depthP);
-		glm::mat4 depthV = glm::lookAt(lightPos, lightPos + glm::normalize(LightDir), glm::vec3(0, 1, 0));
+		glm::mat4 depthV = glm::lookAt(lightPos, LightDir, glm::vec3(0, 1, 0));
 
 		glUniformMatrix4fv(locationP, 1, GL_FALSE, &depthP[0][0]);
 
@@ -190,6 +184,19 @@ int main() {
 				glUniformMatrix4fv(location_depthBiasMVP, 1, GL_FALSE, depthBiasMVP);
 				object.render();
 			MVstack.pop();
+		
+			MVstack.push();
+				translateVector[0] = 0.0;
+				translateVector[1] = -0.7;
+				translateVector[2] = 0.0;
+				MVstack.translate(translateVector);
+				matrixMult(&depthP[0][0], MVstack.getCurrentMatrix(), fDepthMVP);
+				glUniformMatrix4fv(location_depthMVP, 1, GL_FALSE, fDepthMVP);
+
+				matrixMult(biasMatrix, fDepthMVP, depthBiasMVP);
+				glUniformMatrix4fv(location_depthBiasMVP, 1, GL_FALSE, depthBiasMVP);
+				plane.render();
+			MVstack.pop();
 		MVstack.pop();
 		
 		glReadBuffer(GL_NONE);
@@ -211,6 +218,16 @@ int main() {
 			MVstack.rotY(rot * 3.1415);
 			glUniformMatrix4fv(locationMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
 			object.render();
+		MVstack.pop();
+
+
+		MVstack.push();
+			translateVector[0] = 0.0;
+			translateVector[1] = -0.7f;
+			translateVector[2] = 0.0;
+			MVstack.translate(translateVector);
+			glUniformMatrix4fv(locationMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
+			plane.render();
 		MVstack.pop();
 
 		glfwSwapBuffers(window);
