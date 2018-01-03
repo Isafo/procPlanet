@@ -1,7 +1,6 @@
 #include "Shader.h"
 #include "MatrixStack.h"
 #include "TriangleSoup.hpp"
-#include "Plane.h"
 
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
@@ -97,30 +96,20 @@ int main() {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	// CREATE OBJECTS ////////////////////////////////////////////////////////////////////////////////
-	Shader ssaoShader;
-	ssaoShader.createShader("vertexshader.glsl", "fragmentshader.glsl");
-	Shader depthShader;
-	depthShader.createShader("depthShaderV.glsl", "depthShaderF.glsl");
+	Shader planetShader;
+	planetShader.createShader("shaders/planetShader.vert", "shaders/planetShader.frag");
+
 
 	MatrixStack MVstack;
 	MVstack.init();
 
-	locationMV = glGetUniformLocation(ssaoShader.programID, "MV");
-	locationP = glGetUniformLocation(ssaoShader.programID, "P");
-	location_depthTex = glGetUniformLocation(ssaoShader.programID, "depthTex"); 
-	location_depthBiasMVP = glGetUniformLocation(ssaoShader.programID, "depthBiasMVP");
-
-	location_depthMVP = glGetUniformLocation(depthShader.programID, "MVP");
-
-	float translateVector[3] = { 0.0f, 0.0f, 0.0f };
-
-	float test[3] = { 0.0f, 0.0f, 0.0f };
+	locationMV = glGetUniformLocation(planetShader.programID, "MV");
+	locationP = glGetUniformLocation(planetShader.programID, "P");
 
 	TriangleSoup  object;
-	object.readOBJ("trex.obj");
-
-	Plane plane(0.0, 0.0, 0.0, 10.0, 10.0);
-
+	object.createSphere(0.65f, 1024);
+	
+	float translateVector[3];
 	float rot = 0.0;
 	float lastTime{ 0.0f };
 	float currentTime{ 0.0f };
@@ -139,59 +128,7 @@ int main() {
 			rot -= 0.3 * deltaTime;
 		}
 
-		// Create depth map \________________________________________________________________________
-
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, lightDepthTex);
-		//setupViewport(window, P);
-		//glViewport(0, 0, 1024, 1024);
-		glClear(GL_DEPTH_BUFFER_BIT);
-		glUseProgram(depthShader.programID);
-
-		//glm::vec3 lightPos = glm::vec3(0.0f, 0.0, -1.0);
-		//glm::vec3 LightDir = glm::normalize(glm::vec3(0.0f, 0.0, -1.0));
-
-		glm::vec3 lightPos = glm::vec3(0.0f, 1.0, 0.0);
-		glm::vec3 LightDir = glm::normalize(glm::vec3(0.0f, 0.0, 0.0));
-
-		// Compute the MVP matrix from the light's point of view
-
-		glm::mat4 depthP = glm::ortho<float>(-10, 10, -10, 10, -10, 20);
-		glm::transpose(depthP);
-		glm::mat4 depthV = glm::lookAt(lightPos, LightDir, glm::vec3(0, 1, 0));
-
-		glm::mat4 lightSpaceMat = depthP * depthV;
-
-		glUniformMatrix4fv(locationP, 1, GL_FALSE, &depthP[0][0]);
-
-		float fDepthMVP[16] = { 0.0, 0.0, 0.0, 0.0,
-								0.0, 0.0, 0.0, 0.0,
-								0.0, 0.0, 0.0, 0.0,
-								0.0, 0.0, 0.0, 0.0 };
-
-		float depthBiasMVP[16] = { 0.0, 0.0, 0.0, 0.0,
-								   0.0, 0.0, 0.0, 0.0,
-								   0.0, 0.0, 0.0, 0.0, 
-								   0.0, 0.0, 0.0, 0.0 };
-
-		MVstack.push();
-			translateVector[0] = 0.0;
-			translateVector[1] = -0.25;
-			translateVector[2] = -2.0;
-			MVstack.translate(translateVector);
-			MVstack.rotY(rot * 3.1415);
-			matrixMult(&lightSpaceMat[0][0], MVstack.getCurrentMatrix(), fDepthMVP);
-			glUniformMatrix4fv(location_depthMVP, 1, GL_FALSE, fDepthMVP);
-
-			object.render();
-		MVstack.pop();
-		
-		glReadBuffer(GL_NONE);
-
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-
-		//SCENEGRAPH //////////////////////////////////////////////////////////////////////////////////
-		glUseProgram(ssaoShader.programID);
+		glUseProgram(planetShader.programID);
 		setupViewport(window, P);
 		GLRenderCalls();
 
@@ -199,16 +136,11 @@ int main() {
 
 		MVstack.push();
 			translateVector[0] = 0.0;
-			translateVector[1] = -0.25;
-			translateVector[2] = -2.0;
+			translateVector[1] = 0.0;
+			translateVector[2] = -3.0;
 			MVstack.translate(translateVector);
 			MVstack.rotY(rot * 3.1415);
 			glUniformMatrix4fv(locationMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
-
-			matrixMult(&lightSpaceMat[0][0], MVstack.getCurrentMatrix(), fDepthMVP);
-			matrixMult(biasMatrix, fDepthMVP, depthBiasMVP);
-			glUniformMatrix4fv(location_depthBiasMVP, 1, GL_FALSE, depthBiasMVP);
-
 			object.render();
 		MVstack.pop();
 
