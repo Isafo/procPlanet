@@ -4,15 +4,10 @@ layout( location = 0 ) out vec4 FragColor;
 in vec3 Position;
 in vec3 vPos;
 in vec3 Normal;
-in vec2 UV;
-in float Altitude;
 
-//uniform vec3 LP;
-uniform sampler2D tex;
+uniform float TIME;
 
-const float shininess = 4.0;
-
-//uniform float oceanHeight;
+const float shininess = 1.0;
 
 //	Classic Perlin 3D Noise 
 //	by Stefan Gustavson
@@ -171,27 +166,10 @@ float cnoise(vec4 P){
 // 	<https://gist.github.com/patriciogonzalezvivo/670c22f3966e662d2f83>
 #define NUM_OCTAVES 5
 float fbm(vec4 x) {
-	float freq = 0.6f;
-	float amp = 0.5f;
-	float lacunarity = 1.8715f;
-	float gain = 0.87f;
-
-	float sum = 0.0f;
-	for (int i = 0; i < NUM_OCTAVES; ++i) {
-		sum += amp * cnoise(x * freq);
-		freq *= lacunarity;
-		amp *= gain;
-	}
-	return sum;
-}
-
-// 	<https://gist.github.com/patriciogonzalezvivo/670c22f3966e662d2f83>
-#define NUM_OCTAVES 5
-float fbm2(vec4 x) {
-	float freq = 1.2f;
+	float freq = 0.37f;
 	float amp = 0.2f;
 	float lacunarity = 1.8715f;
-	float gain = 0.65f;
+	float gain = 0.85f;
 
 	float sum = 0.0f;
 	for (int i = 0; i < NUM_OCTAVES; ++i) {
@@ -205,10 +183,6 @@ float fbm2(vec4 x) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void main () {
-	float oceanHeight = 0.65f;
-	float sandHeight = oceanHeight + 0.015f;
-	float snowHeight = oceanHeight + 0.13f;
-
 	vec3 X = dFdx(Position);
 	vec3 Y = dFdy(Position);
 	vec3 normal = normalize(cross(X,Y));
@@ -216,24 +190,12 @@ void main () {
 	///////////////////////////////////////////////////////////////////////////
 	// Color
 
-	float noise = abs(fbm(vec4(vPos, Altitude)));
-	float snowNoise = clamp(fbm2(vec4(vPos, 1.0f)), -0.01f, 0.01f);
-
-	float red = step(sandHeight, Altitude) *  step(Altitude, snowHeight  + snowNoise) * noise;
-	float blue = step(Altitude, oceanHeight) * (1.f - (oceanHeight - Altitude));
-	float green = step(sandHeight, Altitude) *  step(Altitude, snowHeight + snowNoise) * (1 - noise);
-	vec3 sandColor = vec3(255.f, 224.f, 158.f) * step(oceanHeight, Altitude) * step(Altitude, sandHeight);
-	
-	float snowHeightNoise = snowHeight + snowNoise;
-	vec3 snowColor = vec3(1.f, 1.f, 1.f);// * max(smoothstep(snowHeight - 0.04, snowHeightNoise, Altitude), step(snowHeightNoise, Altitude)); 
-	
-	vec3 color = mix(vec3(red, green, pow(blue, 5.f)), snowColor, vec3(smoothstep(snowHeight - 0.04, snowHeightNoise, Altitude)));
-	color += sandColor;
-	clamp(color, vec3(0.f), vec3(1.0f));
+	float noise = abs(fbm(vec4(vPos, TIME * 0.1f)));
+  vec4 color = vec4(0.87f, 0.87f, 0.87f, clamp(2 * noise, 0.f, 1.f)); 
 
 	////////////////////////////////////////////////////////////////////////////
 	// Lighting
-  vec3 sunPos = vec3(0.f, -1.0f, 0.0f);
+  vec3 sunPos = vec3(0.f, -1.0f, 1.0f);
 	vec3 lightDir = normalize(sunPos - Position);
 	vec3 viewDir  = normalize(-Position);
 		
@@ -244,7 +206,7 @@ void main () {
 
 	//Diffuse part-----------
 	float diff = max(dot(lightDir, normal), 0.0);
-	vec3 diffuse = diff * color * lightIntensity;
+	vec3 diffuse = diff * vec3(color) * lightIntensity;
 
 	//specular part-------------
 	vec3 H = normalize(lightDir + viewDir);
@@ -256,6 +218,6 @@ void main () {
 	vec3 ambient = 0.3*lightIntensity * white;// * texcolor * lightIntensity;
 	
 	vec3 resultLight = ambient + diffuse;// + specular;
-	FragColor = vec4(resultLight, 1.0f);
+	FragColor = color;//vec4(resultLight, texAlpha);
 }
 

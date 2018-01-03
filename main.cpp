@@ -24,6 +24,9 @@ int main() {
 		0.0f, 0.0f, -0.2f, 0.0f };
 	GLint locationP;
 	GLint locationMV;
+	GLint locationC_P;
+	GLint locationC_MV;
+	GLint locationC_TIME;
 	GLint location_depthTex;
 	GLint location_depthMVP;
 	GLint location_depthBiasMVP;
@@ -99,6 +102,8 @@ int main() {
 	Shader planetShader;
 	planetShader.createShader("shaders/planetShader.vert", "shaders/planetShader.frag");
 
+	Shader cloudShader;
+	cloudShader.createShader("shaders/cloudShader.vert", "shaders/cloudShader.frag");
 
 	MatrixStack MVstack;
 	MVstack.init();
@@ -106,8 +111,15 @@ int main() {
 	locationMV = glGetUniformLocation(planetShader.programID, "MV");
 	locationP = glGetUniformLocation(planetShader.programID, "P");
 
-	TriangleSoup  object;
-	object.createSphere(0.65f, 1024);
+	locationC_MV = glGetUniformLocation(cloudShader.programID, "MV");
+	locationC_P = glGetUniformLocation(cloudShader.programID, "P");
+	locationC_TIME = glGetUniformLocation(cloudShader.programID, "TIME");
+
+	TriangleSoup  surface;
+	surface.createSphere(0.65f, 1024);
+
+	TriangleSoup  cloud;
+	cloud.createSphere(0.70f, 1024);
 	
 	float translateVector[3];
 	float rot = 0.0;
@@ -133,6 +145,7 @@ int main() {
 		GLRenderCalls();
 
 		glUniformMatrix4fv(locationP, 1, GL_FALSE, P);
+		
 
 		MVstack.push();
 			translateVector[0] = 0.0;
@@ -141,7 +154,14 @@ int main() {
 			MVstack.translate(translateVector);
 			MVstack.rotY(rot * 3.1415);
 			glUniformMatrix4fv(locationMV, 1, GL_FALSE, MVstack.getCurrentMatrix());
-			object.render();
+			surface.render();
+
+			glUseProgram(cloudShader.programID);
+			glUniformMatrix4fv(locationC_P, 1, GL_FALSE, P);
+			glUniformMatrix4fv(locationC_MV, 1, GL_FALSE, MVstack.getCurrentMatrix());
+			const GLfloat time = currentTime;
+			glUniform1fv(locationC_TIME, 1, &time);
+			cloud.render();
 		MVstack.pop();
 
 		glfwSwapBuffers(window);
@@ -169,6 +189,8 @@ void GLRenderCalls() {
 
 	glEnable(GL_DEPTH_TEST); // Use the Z buffer
 	glEnable(GL_CULL_FACE);  // Use back face culling
+	glEnable(GL_BLEND); 
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glCullFace(GL_BACK);
 }
 
